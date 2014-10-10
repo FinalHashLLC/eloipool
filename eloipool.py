@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python3.3
 # Eloipool - Python Bitcoin pool server
 # Copyright (C) 2011-2012  Luke Dashjr <luke-jr+eloipool@utopios.org>
 # Portions written by Peter Leurs <kinlo@triplemining.com>
@@ -36,7 +36,7 @@ if len(rootlogger.handlers) == 0:
         format=logformat,
 		level=logging.DEBUG,
 	)
-    for infoOnly in (
+	for infoOnly in (
             'checkShare',
             'getTarget',
             'JSONRPCHandler',
@@ -46,7 +46,7 @@ if len(rootlogger.handlers) == 0:
             'Waker for JSONRPCServer',
             'Waker for StratumServer',
             'WorkLogPruner'
-    ):
+	):
 		logging.getLogger(infoOnly).setLevel(logging.INFO)
 if getattr(config, 'LogToSysLog', False):
     sysloghandler = logging.handlers.SysLogHandler(address='/dev/log')
@@ -64,11 +64,6 @@ def RaiseRedFlags(reason):
 	logging.getLogger('redflag').critical(reason)
 	return reason
 
-
-from bitcoin.node import BitcoinLink, BitcoinNode
-
-bcnode = BitcoinNode(config.UpstreamNetworkId)
-bcnode.userAgent += b'Eloipool:0.1/'
 
 import jsonrpc
 
@@ -114,7 +109,7 @@ def makeCoinbaseTxn(coinbaseValue, useCoinbaser = True):
 		else:
 			coinbaseValue -= coinbased
 	
-	pkScript = BitcoinScript.toAddress(config.TrackerAddr)
+	pkScript = BitcoinScript.toAddress(UpstreamBitcoindJSONRPC.getaccountaddress("pool"))
 	txn.addOutput(coinbaseValue, pkScript)
 	
 	# TODO
@@ -196,9 +191,7 @@ from util import PendingUpstream, RejectedShare, bdiff1target, dblsha, PoWHash, 
 import jsonrpc
 import traceback
 
-gotwork = None
-if hasattr(config, 'GotWorkURI'):
-	gotwork = jsonrpc.ServiceProxy(config.GotWorkURI)
+gotwork = jsonrpc.ServiceProxy('http://127.0.0.1:9001/')
 
 if not hasattr(config, 'DelayLogForUpstream'):
 	config.DelayLogForUpstream = False
@@ -419,6 +412,7 @@ def IsJobValid(wli, wluser=None):
 
 def checkShare(share):
 	shareTime = share['time'] = time()
+	share['ourResult'] = 1
 	
 	username = share['username']
 	if 'data' in share:
@@ -427,6 +421,7 @@ def checkShare(share):
 		data = share['data']
 		
 		if username not in workLog:
+			share['ourResult'] = 0
 			raise RejectedShare('unknown-user')
 		MWL = workLog[username]
 		
@@ -457,6 +452,7 @@ def checkShare(share):
 		othertxndata = b''
 	
 	if wli not in MWL:
+		share['oresult'] = 0
 		raise RejectedShare('unknown-work')
 	(wld, issueT) = MWL[wli]
 	share[mode] = wld
@@ -473,9 +469,13 @@ def checkShare(share):
 		shareMerkleRoot = data[36:68]
 	
 	if data in DupeShareHACK:
+		share['oresult'] = 0
 		raise RejectedShare('duplicate')
 	DupeShareHACK[data] = None
 	
+	share['coin'] = 'DGC-SCRYPT'
+	share['blkheight'] = MM.currentBlock[1]
+
 	blkhash = PoWHash(data)
 	blkhashn = LEhash2int(blkhash)
 	
@@ -505,7 +505,6 @@ def checkShare(share):
 		logfunc('Real block payload: %s' % (b2a_hex(payload).decode('utf8'),))
 		RBPs.append(payload)
 		threading.Thread(target=blockSubmissionThread, args=(payload, blkhash, share)).start()
-		bcnode.submitBlock(payload)
 		if config.DelayLogForUpstream:
 			share['upstreamRejectReason'] = PendingUpstream
 		else:
@@ -597,10 +596,7 @@ def logShare(share):
 		i.logShare(share)
 
 def checkAuthentication(username, password):
-	for i in authenticators:
-		if i.checkAuthentication(username, password):
-			return True
-	return False
+	return True
 		
 def receiveShare(share):
 	# TODO: username => userid
@@ -654,8 +650,8 @@ def stopServers():
 	stopServers.already = True
 	
 	logger.info('Stopping servers...')
-	global bcnode, server
-	servers = (bcnode, server, stratumsrv)
+	global server
+	servers = (server, stratumsrv)
 	for s in servers:
 		s.keepgoing = False
 	for s in servers:
@@ -825,27 +821,19 @@ if __name__ == "__main__":
 
 
 	if not hasattr(config, 'Authentication'):
-	config.Authentication = ({'module': 'allowall'},)
+		config.Authentication = ({'module': 'allowall'},)
 	
 	for i in config.Authentication:
-	name = i['module']
-	parameters = i
-	try:
-	fp, pathname, description = imp.find_module(name, authentication.__path__)
-	m = imp.load_module(name, fp, pathname, description)
-	lo = getattr(m, name)(**parameters)
-	authenticators.append(lo)
-	except:
-	logging.getLogger('authentication').error("Error setting up authentication module %s: %s", name, sys.exc_info())
+		name = i['module']
+		parameters = i
+		try:
+			fp, pathname, description = imp.find_module(name, authentication.__path__)
+			m = imp.load_module(name, fp, pathname, description)
+			lo = getattr(m, name)(**parameters)
+			authenticators.append(lo)
+		except:
+			logging.getLogger('authentication').error("Error setting up authentication module %s: %s", name, sys.exc_info())
 	
-	LSbc = []
-	if not hasattr(config, 'BitcoinNodeAddresses'):
-		config.BitcoinNodeAddresses = ()
-	for a in config.BitcoinNodeAddresses:
-		LSbc.append(NetworkListener(bcnode, a))
-	
-	if hasattr(config, 'UpstreamBitcoindNode') and config.UpstreamBitcoindNode:
-		BitcoinLink(bcnode, dest=config.UpstreamBitcoindNode)
 	
 	import jsonrpc_getblocktemplate
 	import jsonrpc_getwork
@@ -862,8 +850,7 @@ if __name__ == "__main__":
 	LS = []
 	for a in config.JSONRPCAddresses:
 		LS.append(JSONRPCListener(server, a))
-	if hasattr(config, 'SecretUser'):
-		server.SecretUser = config.SecretUser
+	server.SecretUser = config.SecretUser
 	server.aux = MM.CoinbaseAux
 	server.getBlockHeader = getBlockHeader
 	server.getBlockTemplate = getBlockTemplate
@@ -882,7 +869,7 @@ if __name__ == "__main__":
 	stratumsrv.getTarget = getTarget
 	stratumsrv.checkAuthentication = checkAuthentication
 	stratumsrv.defaultTarget = config.ShareTarget
-    stratumsrv.IsJobValid = IsJobValid
+	stratumsrv.IsJobValid = IsJobValid
 	if not hasattr(config, 'StratumAddresses'):
 		config.StratumAddresses = ()
 	for a in config.StratumAddresses:
@@ -895,10 +882,6 @@ if __name__ == "__main__":
 	prune_thr = threading.Thread(target=WorkLogPruner, args=(workLog,))
 	prune_thr.daemon = True
 	prune_thr.start()
-	
-	bcnode_thr = threading.Thread(target=bcnode.serve_forever)
-	bcnode_thr.daemon = True
-	bcnode_thr.start()
 	
 	stratum_thr = threading.Thread(target=stratumsrv.serve_forever)
 	stratum_thr.daemon = True

@@ -206,7 +206,7 @@ class StratumHandler(networkserver.SocketHandler):
 	
 	def _stratum_mining_authorize(self, username, password = None):
 		try:
-			valid = self.checkAuthentication(username, password)
+			valid = self.server.checkAuthentication(username, password)
 		except:
 			valid = False
 		if valid:

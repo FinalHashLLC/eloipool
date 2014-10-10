@@ -70,7 +70,7 @@ class merkleMaker(threading.Thread):
 		super().__init__(*a, **k)
 		self.daemon = True
 		self.logger = logging.getLogger('merkleMaker')
-		self.CoinbasePrefix = b''
+		self.CoinbasePrefix = b'Mined by Multicoin.co'
 		self.CoinbaseAux = {}
 		self.isOverflowed = False
 		self.lastWarning = {}
@@ -109,7 +109,7 @@ class merkleMaker(threading.Thread):
 		self.nextMerkleUpdate = 0
 	
 	def createClearMerkleTree(self, height):
-		subsidy = 5000000000 >> (height // 840000)
+		subsidy = self.access.getblocktemplate()['coinbasevalue']
 
 		cbtxn = self.makeCoinbaseTxn(subsidy, False)
 		cbtxn.assemble()
