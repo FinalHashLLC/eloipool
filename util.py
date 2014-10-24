@@ -21,13 +21,13 @@ import string
 from struct import unpack
 import traceback
 import config
+import coindefinition
+import importlib
 
-try:
-	from ltc_scrypt import getPoWHash
-except:
-	print('ltc_scrypt.getPoWHash unavailable!')
-	exit()
-bdiff1target = 0x0000FFFF00000000000000000000000000000000000000000000000000000000
+settings = coindefinition.getSettings(config.Algorithm)
+algo = importlib.import_module(settings['module'])
+
+bdiff1target = settings['bdiff1target']
 
 def YN(b):
 	if b is None:
@@ -128,7 +128,7 @@ def dblsha(b):
 	return sha256(sha256(b).digest()).digest()
 
 def PoWHash(b):
-	return getPoWHash(b)
+	return algo.getPoWHash(b)
 
 def swap32(b):
 	o = b''

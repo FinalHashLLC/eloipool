@@ -226,7 +226,7 @@ class merkleMaker(threading.Thread):
 		
 		# Aim to produce blocks with "Power Of Two" transaction counts
 		# This helps avoid any chance of someone abusing CVE-2012-2459 with them
-		POTMode = getattr(self, 'POT', 1)
+		POTMode = getattr(self, 'POT', 0)
 		txncount = len(txnlist) + 1
 		if POTMode:
 			feetxncount = txncount

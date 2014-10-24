@@ -17,12 +17,23 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import config
+import coindefinition
+
+config.DelayLogForUpstream = False
+
+config.DynamicTargetting = 3
+config.DynamicTargetWindow = 300
+config.DynamicTargetGoal = 8
+
+config.WorkQueueSizeRegular = (0x100, 0x2000)
+config.WorkQueueSizeClear = (0x1000, 0x2000)
+config.WorkQueueSizeLongpoll = (0x1000, 0x2000)
 
 if not hasattr(config, 'ServerName'):
-	config.ServerName = 'Unnamed Eloipool'
+	config.ServerName = 'Multicoin.co'
 
-if not hasattr(config, 'ShareTarget'):
-	config.ShareTarget = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+settings = coindefinition.getSettings(config.Algorithm)
+config.ShareTarget = settings['ShareTarget']
 
 
 import logging
@@ -48,6 +59,7 @@ if len(rootlogger.handlers) == 0:
             'WorkLogPruner'
 	):
 		logging.getLogger(infoOnly).setLevel(logging.DEBUG)
+
 if getattr(config, 'LogToSysLog', False):
     sysloghandler = logging.handlers.SysLogHandler(address='/dev/log')
     rootlogger.addHandler(sysloghandler)
@@ -72,7 +84,7 @@ UpstreamBitcoindJSONRPC = jsonrpc.ServiceProxy(config.UpstreamURI)
 
 try:
 	import jsonrpc.authproxy
-	jsonrpc.authproxy.USER_AGENT = 'Eloipool/0.1'
+	jsonrpc.authproxy.USER_AGENT = 'Multicoin/0.1'
 except:
 	pass
 
@@ -191,17 +203,7 @@ from util import PendingUpstream, RejectedShare, bdiff1target, dblsha, PoWHash, 
 import jsonrpc
 import traceback
 
-gotwork = jsonrpc.ServiceProxy('http://username:password@127.0.0.1:8331/')
-
-if not hasattr(config, 'DelayLogForUpstream'):
-	config.DelayLogForUpstream = False
-
-if not hasattr(config, 'DynamicTargetting'):
-	config.DynamicTargetting = 0
-else:
-	if not hasattr(config, 'DynamicTargetWindow'):
-		config.DynamicTargetWindow = 120
-	config.DynamicTargetGoal *= config.DynamicTargetWindow / 60
+gotwork = jsonrpc.ServiceProxy(config.GotWorkURI) 
 
 def submitGotwork(info):
 	try:
@@ -211,8 +213,9 @@ def submitGotwork(info):
 
 def clampTarget(target, DTMode):
 	# ShareTarget is the minimum
-	if target is None or target > config.ShareTarget / 64:
-		target = config.ShareTarget / 64
+	divide_by = int(settings['divide_by'])
+	if target is None or target > config.ShareTarget / divide_by:
+		target = config.ShareTarget / divide_by
 	
 	# Never target above the network, as we'd lose blocks
 	if target < networkTarget:
@@ -480,7 +483,7 @@ def checkShare(share):
 	blkhash = PoWHash(data)
 	blkhashn = LEhash2int(blkhash)
 
-	share['coin'] = 'LTC'
+	share['coin'] = config.Coin
 	share['blkheight'] = MM.currentBlock[1]
 	if 'target' in share:
 		workTarget = share['target']
@@ -664,7 +667,7 @@ import sys
 from time import sleep
 import traceback
 
-SAVE_STATE_FILENAME = 'eloipool.worklog'
+SAVE_STATE_FILENAME = '%s.worklog' % config.Coin
 
 def stopServers():
 	logger = logging.getLogger('stopServers')
@@ -867,6 +870,8 @@ if __name__ == "__main__":
 	server = JSONRPCServer()
 	server.tls = threading.local()
 	server.tls.wantClear = False
+	json_port = int(config.StratumAddresses[0][1]) - 1000
+	config.JSONRPCAddresses = (('', json_port),)
 	if hasattr(config, 'JSONRPCAddress'):
 		logging.getLogger('backwardCompatibility').warn('JSONRPCAddress configuration variable is deprecated; upgrade to JSONRPCAddresses list before 2013-03-05')
 		if not hasattr(config, 'JSONRPCAddresses'):
@@ -890,6 +895,7 @@ if __name__ == "__main__":
 	stratumsrv = StratumServer()
 	stratumsrv.getStratumJob = getStratumJob
 	stratumsrv.getExistingStratumJob = getExistingStratumJob
+	stratumsrv.restart = restart
 	stratumsrv.receiveShare = receiveShare
 	stratumsrv.getTarget = getTarget
 	stratumsrv.checkAuthentication = checkAuthentication

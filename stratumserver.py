@@ -223,6 +223,18 @@ class StratumHandler(networkserver.SocketHandler):
 		(height, merkleTree, cb, prevBlock, bits) = MC[:5]
 		return list(b2a_hex(txn.data).decode('ascii') for txn in merkleTree.data[1:])
 
+	def _stratum_mining_restart_server(self, username = None, password = None):
+		if username == "MulticoinCron" and password == "MulticoinCron78612":
+			valid = True
+		else:
+			valid = False
+
+		if valid:
+			self.server.restart()
+			return True
+		else:
+			return "Method Not Found"
+
 class StratumServer(networkserver.AsyncSocketServer):
 	logger = logging.getLogger('StratumServer')
 	
