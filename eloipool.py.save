@@ -1,4 +1,4 @@
-#!/usr/bin/python3.2
+#!/usr/bin/python3.3
 # Eloipool - Python Bitcoin pool server
 # Copyright (C) 2011-2012  Luke Dashjr <luke-jr+eloipool@utopios.org>
 # Portions written by Peter Leurs <kinlo@triplemining.com>
@@ -47,7 +47,7 @@ if len(rootlogger.handlers) == 0:
             'Waker for StratumServer',
             'WorkLogPruner'
 	):
-		logging.getLogger(infoOnly).setLevel(logging.DEBUG)
+		logging.getLogger(infoOnly).setLevel(logging.INFO)
 if getattr(config, 'LogToSysLog', False):
     sysloghandler = logging.handlers.SysLogHandler(address='/dev/log')
     rootlogger.addHandler(sysloghandler)
@@ -191,7 +191,7 @@ from util import PendingUpstream, RejectedShare, bdiff1target, dblsha, PoWHash, 
 import jsonrpc
 import traceback
 
-gotwork = jsonrpc.ServiceProxy('http://username:password@127.0.0.1:8331/')
+gotwork = jsonrpc.ServiceProxy('http://127.0.0.1:9001/')
 
 if not hasattr(config, 'DelayLogForUpstream'):
 	config.DelayLogForUpstream = False
@@ -220,11 +220,7 @@ def clampTarget(target, DTMode):
 	
 	if DTMode == 2:
 		# Ceil target to a power of two :)
-		truebits = log(target, 2)
-		if target <= 2**int(truebits):
-			# Workaround for bug in Python's math.log function
-			truebits = int(truebits)
-			target = 2**ceil(truebits) - 1
+		target = 2**int(log(target, 2) + 1) - 1
 	elif DTMode == 3:
 		# Round target to multiple of bdiff 1
 		target = bdiff1target / int(round(target2bdiff(target)))
@@ -477,26 +473,12 @@ def checkShare(share):
 		raise RejectedShare('duplicate')
 	DupeShareHACK[data] = None
 	
+	share['coin'] = 'BTC'
+	share['blkheight'] = MM.currentBlock[1]
+
 	blkhash = PoWHash(data)
 	blkhashn = LEhash2int(blkhash)
-
-	share['coin'] = 'LTC'
-	share['blkheight'] = MM.currentBlock[1]
-	if 'target' in share:
-		workTarget = share['target']
-	elif len(wld) > 6:
-		workTarget = wld[6]
-	else:   
-		workTarget = None
-
-	if workTarget is None:
-		workTarget = config.ShareTarget
-	if blkhashn > workTarget:
-		raise RejectedShare('high-hash')
-	share['target'] = workTarget
-	share['difficulty'] = config.ShareTarget / workTarget
-	share['_targethex'] = '%064x' % (workTarget,)
-
+	
 	global networkTarget
 	logfunc = getattr(checkShare.logger, 'info' if blkhashn <= networkTarget else 'debug')
 	logfunc('BLKHASH: %64x' % (blkhashn,))
@@ -541,20 +523,13 @@ def checkShare(share):
 				coinbaseMrkl += step
 			coinbaseMrkl += b"\0\0\0\0"
 			info = {}
-			info['user'] = username
-			info['ip'] = share['remoteHost']
-			info['oresult'] = 1
-			info['uresult'] = 1
-			info['rejectReason'] = 'Valid Share'
-			info['diff'] = share['difficulty']
 			info['hash'] = b2a_hex(blkhash).decode('ascii')
 			info['header'] = b2a_hex(data).decode('ascii')
 			info['coinbaseMrkl'] = b2a_hex(coinbaseMrkl).decode('ascii')
 			thr = threading.Thread(target=submitGotwork, args=(info,))
 			thr.daemon = True
 			thr.start()
-		except Exception as e:
-			print(e)
+		except:
 			checkShare.logger.warning('Failed to build gotwork request')
 	
 	if 'target' in share:

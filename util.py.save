@@ -22,12 +22,8 @@ from struct import unpack
 import traceback
 import config
 
-try:
-	from ltc_scrypt import getPoWHash
-except:
-	print('ltc_scrypt.getPoWHash unavailable!')
-	exit()
-bdiff1target = 0x0000FFFF00000000000000000000000000000000000000000000000000000000
+
+bdiff1target = 0x00000000FFFF0000000000000000000000000000000000000000000000000000
 
 def YN(b):
 	if b is None:
@@ -49,6 +45,7 @@ def target2pdiff(target):
 def target2bdiff(target):
 	bdiff = bdiff1target / target
 	return _maybe_int(bdiff)
+
 
 class shareLogFormatter:
 	_re_x = re.compile(r'^\s*(\w+)\s*(?:\(\s*(.*?)\s*\))?\s*$')
