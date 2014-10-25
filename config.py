@@ -5,24 +5,6 @@ Algorithm = 'Scrypt'
 
 Coin = 'LTC'
 
-# Automatically adjust targets per username 0 = disabled 1 = arbitrary targets 2 = power of two difficulties (zero bit counts)
-DynamicTargetting = 3
-
-# How many shares per minute to try to achieve on average
-DynamicTargetGoal = 8
-
-# Number of seconds hashrate is measured over
-DynamicTargetWindow = 300
-
-# How long to wait between getmemorypool updates normally
-MinimumTxnUpdateWait = 5
-
-# How long to wait between retries if getmemorypool fails
-TxnUpdateRetryWait = 1
-
-# How long to sleep in idle loops (temporary!)
-IdleSleepTime = 0.1
-
 # JSON-RPC server for getmemorypool
 UpstreamURI = 'http://username:password@localhost:8002'
 
@@ -50,13 +32,4 @@ ShareLogging = (
 	},
 )
 
-# Authentication
-# There currently are 2 modules.
-# - allowall will allow every username/password combination
-# - simplefile will use the username/passwords from a file, which contains username<tab>password\n with no \n on the last line.
-Authentication = (
-	{
-		'module': 'allowall',
-	},
-)
 

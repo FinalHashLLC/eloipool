@@ -74,13 +74,15 @@ class merkleMaker(threading.Thread):
 		self.CoinbaseAux = {}
 		self.isOverflowed = False
 		self.lastWarning = {}
-		self.MinimumTxnUpdateWait = 5
+		self.MinimumTxnUpdateWait = 1
 		self.overflowed = 0
-		self.DifficultyChangeMod = 2016
+		self.DifficultyChangeMod = 1
 	
 	def _prepare(self):
 		self.access = jsonrpc.ServiceProxy(self.UpstreamURI)
-		
+		self.MinimumTxnUpdateWait = 1		
+		self.IdleSleepTime = 1
+		self.TxnUpdateRetryWait = 1
 		self.ready = False
 		self.readyCV = threading.Condition()
 		
