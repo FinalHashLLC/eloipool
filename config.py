@@ -20,3 +20,7 @@ ShareLogging = (
 
 # Dynamically Configured Settings
 
+Algorithm = 'sha256' 
+Coin = 'BTC' 
+UpstreamURI = 'http://username:password@127.0.0.1:8001' 
+StratumAddresses = (('', 3333),) 
