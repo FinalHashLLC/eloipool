@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import config
-import coindefinition
+from config import config
+from config import coindefinition
 
 config.DelayLogForUpstream = False
 
@@ -77,7 +77,7 @@ def RaiseRedFlags(reason):
 	return reason
 
 
-import jsonrpc
+from networking import jsonrpc
 
 UpstreamBitcoindJSONRPC = jsonrpc.ServiceProxy(config.UpstreamURI)
 
@@ -88,9 +88,9 @@ try:
 except:
 	pass
 
-from bitcoin.script import BitcoinScript
-from bitcoin.txn import Txn
-from base58 import b58decode
+from block.bitcoin.script import BitcoinScript
+from block.bitcoin.txn import Txn
+from block.base58 import b58decode
 from struct import pack
 import subprocess
 from time import time
@@ -129,8 +129,8 @@ def makeCoinbaseTxn(coinbaseValue, useCoinbaser = True):
 	return txn
 
 
-import jsonrpc_getwork
-from util import Bits2Target
+from networking import jsonrpc_getwork
+from lib.util import Bits2Target
 
 workLog = {}
 userStatus = {}
@@ -183,7 +183,7 @@ def WorkLogPruner(wl):
 WorkLogPruner.logger = logging.getLogger('WorkLogPruner')
 
 
-from merklemaker import merkleMaker
+from block.merklemaker import merkleMaker
 MM = merkleMaker()
 MM.__dict__.update(config.__dict__)
 MM.makeCoinbaseTxn = makeCoinbaseTxn
@@ -194,13 +194,13 @@ MM.onBlockUpdate = updateBlocks
 from binascii import b2a_hex
 from copy import deepcopy
 from math import ceil, log
-from merklemaker import MakeBlockHeader
+from block.merklemaker import MakeBlockHeader
 from struct import pack, unpack
 import threading
 from time import time
-from util import PendingUpstream, RejectedShare, bdiff1target, dblsha, PoWHash, LEhash2int, swap32, target2bdiff, \
+from lib.util import PendingUpstream, RejectedShare, bdiff1target, dblsha, PoWHash, LEhash2int, swap32, target2bdiff, \
     target2pdiff
-import jsonrpc
+from networking import jsonrpc
 import traceback
 
 gotwork = jsonrpc.ServiceProxy(config.GotWorkURI) 
@@ -322,9 +322,9 @@ authenticators = []
 RBDs = []
 RBPs = []
 
-from bitcoin.varlen import varlenEncode, varlenDecode
-import bitcoin.txn
-from merklemaker import assembleBlock
+from block.bitcoin.varlen import varlenEncode, varlenDecode
+from block.bitcoin import txn
+from block.merklemaker import assembleBlock
 
 RBFs = []
 def blockSubmissionThread(payload, blkhash, share):
@@ -341,10 +341,10 @@ def blockSubmissionThread(payload, blkhash, share):
 			try:
 				try:
 					# bitcoind 0.5/0.6 getmemorypool
-					reason = UpstreamBitcoindJSONRPC.getmemorypool(payload)
+					reason = UpstreamBitcoindJSONRPC.getblocktemplate({'mode':'submit', 'data': payload})
 				except:
 					# Old BIP 22 draft getmemorypool
-					reason = UpstreamBitcoindJSONRPC.getmemorypool(payload, {})
+					reason = UpstreamBitcoindJSONRPC.getmemorypool(payload)
 				if reason is True:
 					reason = None
 				elif reason is False:
@@ -389,13 +389,14 @@ def checkData(share):
 	
 	# Note that we should accept miners reducing version to 1 if they don't understand 2 yet
 	# FIXME: When the supermajority is upgraded to version 2, stop accepting 1!
-	if data[1:4] != b'\0\0\0' or data[0] > 2:
+	if data[1:4] != b'\0\0\0' or data[0] > 6:
 		raise RejectedShare('bad-version')
 
-def buildStratumData(share, merkleroot):
+def buildStratumData(share, merkleroot, version = 2):
 	(prevBlock, height, bits) = MM.currentBlock
 	
-	data = b'\x02\0\0\0'
+
+	data = pack('<L', version)
 	data += prevBlock
 	data += merkleroot
 	data += share['ntime'][::-1]
@@ -472,7 +473,12 @@ def checkShare(share):
 		coinbase = workCoinbase + share['extranonce1'] + share['extranonce2']
 		cbtxn.setCoinbase(coinbase)
 		cbtxn.assemble()
-		data = buildStratumData(share, workMerkleTree.withFirst(cbtxn))
+		try:
+			nVersion = workMerkleTree.MP['version']
+		except:
+			nVersion = 2
+
+		data = buildStratumData(share, workMerkleTree.withFirst(cbtxn), nVersion)
 		shareMerkleRoot = data[36:68]
 	
 	if data in DupeShareHACK:
@@ -481,6 +487,9 @@ def checkShare(share):
 	DupeShareHACK[data] = None
 	
 	blkhash = PoWHash(data)
+	if blkhash[28:] != b'\0\0\0\0':
+		raise RejectedShare('H-not-zero')
+
 	blkhashn = LEhash2int(blkhash)
 
 	share['coin'] = config.Coin
@@ -795,13 +804,13 @@ def restoreState():
 		logger.info('Total downtime: %g seconds' % (time() - t,))
 
 
-from jsonrpcserver import JSONRPCListener, JSONRPCServer
-import interactivemode
-from networkserver import NetworkListener
+from networking.jsonrpcserver import JSONRPCListener, JSONRPCServer
+from lib import interactivemode
+from networking.networkserver import NetworkListener
 import threading
 import sharelogging
 import authentication
-from stratumserver import StratumServer
+from networking.stratumserver import StratumServer
 import imp
 
 if __name__ == "__main__":
@@ -862,9 +871,9 @@ if __name__ == "__main__":
 			logging.getLogger('authentication').error("Error setting up authentication module %s: %s", name, sys.exc_info())
 	
 	
-	import jsonrpc_getblocktemplate
-	import jsonrpc_getwork
-	import jsonrpc_setworkaux
+	from networking import jsonrpc_getblocktemplate
+	from networking import jsonrpc_getwork
+	from networking import jsonrpc_setworkaux
 	
 	server = JSONRPCServer()
 	server.tls = threading.local()
